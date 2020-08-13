@@ -125,29 +125,29 @@ def load_data():
     link_df = pd.read_csv('input_link.csv',encoding='gbk')
     
     # prepare for assume data
-    g_dict = od_df[['origin','demand']].groupby('origin').sum()['demand']             #小区出行生成量　Series
-    od_df['split_ratio'] = od_df.apply(lambda x: x.demand/g_dict[x.origin], axis=1)   #在OD的dataframe中增加一列为OD分流比例
-    od_df['pair'] = od_df.apply(lambda x: (x.origin, x.destination), axis=1)          #增加一列为OD pair
-    demand_dict = od_df[['pair','demand']].set_index('pair').to_dict()['demand']      #OD需求量　Dict
+    g_dict = od_df[['origin','demand']].groupby('origin').sum()['demand']            
+    od_df['split_ratio'] = od_df.apply(lambda x: x.demand/g_dict[x.origin], axis=1)  
+    od_df['pair'] = od_df.apply(lambda x: (x.origin, x.destination), axis=1)         
+    demand_dict = od_df[['pair','demand']].set_index('pair').to_dict()['demand']     
     link_df['pair'] = link_df.apply(lambda x: (x.from_node_id, x.to_node_id), axis=1)
     link_dict = link_df[['pair','link_id']].set_index('pair').to_dict()['link_id']
     
     ### 01-15
-    flow_dict = link_df[['link_id','sensor_count']].set_index('link_id').to_dict()['sensor_count'] #link上的流量和link_id的对应关系
+    flow_dict = link_df[['link_id','sensor_count']].set_index('link_id').to_dict()['sensor_count']
     
-    index_sensor_count = list()   #记录有sensor_count的link_id
+    index_sensor_count = list() 
     for link_id in flow_dict.keys():
         if flow_dict[link_id]!=0:
             index_sensor_count.append(link_id)
         
     for i in range(len(path_df)):
-        path_r = path_df.loc[i]   #循环取出path_df中的每一行
+        path_r = path_df.loc[i] 
         od_pair = (path_r.origin_node_id,path_r.destination_node_id)
-        path_flow = path_r.path_proportion * demand_dict[od_pair] # path_proportion是已有数据还是估计数据？？？
-        node_list = path_r.path_node_sequence[:-1].split(';')     #取出除了倒数第一个元素外其他所有元素，用；隔开
+        path_flow = path_r.path_proportion * demand_dict[od_pair]
+        node_list = path_r.path_node_sequence[:-1].split(';')    
         for i in range(1,len(node_list)):
             link_id = link_dict[(int(node_list[i-1]),int(node_list[i]))]
-            if link_id not in index_sensor_count:     #没有sensor_data的数据按计算值更新
+            if link_id not in index_sensor_count:   
                 flow_dict[link_id] += path_flow
                 
     # Node
@@ -483,7 +483,7 @@ with tf.Session() as sess:
     t3 = datetime.datetime.now()
     print('Using Time: ',t3-t2,'\n')
     
-    list0 = []   #创建空列表存放loss
+    list0 = []
     list1 = []
     list2 = []
     list3 = []
@@ -497,12 +497,12 @@ with tf.Session() as sess:
         train_mse2, _ = sess.run([f2, optimizer2], feed_dict=feed)
         train_mse3, _ = sess.run([f3, optimizer3], feed_dict=feed)
         
-        list0.append(train_mse)   #增添列表中的元素
+        list0.append(train_mse)   
         list1.append(train_mse1)
         list2.append(train_mse2)
         list3.append(train_mse3)
         
-        #将列表写入到csv文件当中
+
         dataframe = pd.DataFrame({'loss':list0, 'loss1':list1, 'loss2':list2, 'loss3':list3})   
         dataframe.to_csv("output_loss.csv", index=False)
         
