@@ -12,6 +12,7 @@ import time
 import datetime
 import random
 inputLocation ="SiouxFalls network/"
+outputLocation = "SiouxFalls network/"+"BTCG/"
 picLocation = inputLocation + "pictures/"
 
 # In[2]:Data format: structure
@@ -34,10 +35,10 @@ class DNode:
 
 
 class DOD:
-    def __init__(self, od_id, from_zone_id, to_zone_id, split_ratio, o_volume,d_volume,cost, gamma, theta):
+    def __init__(self, od_id, o_zone_id, d_zone_id, split_ratio, o_volume,d_volume,cost, gamma, theta):
         self.od_id = od_id
-        self.from_zone_id = from_zone_id
-        self.to_zone_id = to_zone_id
+        self.o_zone_id = o_zone_id
+        self.d_zone_id = d_zone_id
         self.split_ratio = split_ratio
         self.o_volume=o_volume
         self.d_volume=d_volume
@@ -47,24 +48,25 @@ class DOD:
 
 
 class DPath:
-    def __init__(self, path_id, from_zone_id, to_zone_id, node_sequence, link_sequence, proportion, cost, travel_time):
+    def __init__(self, path_id, o_zone_id, d_zone_id, node_sequence, link_sequence, path_proportion, cost, travel_time):
         self.path_id = path_id
-        self.from_zone_id = from_zone_id
-        self.to_zone_id = to_zone_id
+        self.o_zone_id = o_zone_id
+        self.d_zone_id = d_zone_id
         self.node_sequence = node_sequence
         self.link_sequence = link_sequence
-        self.proportion = proportion
+        self.path_proportion = path_proportion
         self.cost = cost
         self.travel_time = travel_time
 
 
 class DLink:
-    def __init__(self, link_id, from_node_id, to_node_id, length, is_observed,
+    def __init__(self, link_id, o_node_id, d_node_id, length,sensor_count, is_observed,
                  sensor_id=None, travel_time=None, toll=None, flow=0):
         self.link_id = link_id
-        self.from_node_id = from_node_id
-        self.to_node_id = to_node_id
+        self.o_node_id = o_node_id
+        self.d_node_id = d_node_id
         self.length = length
+        self.sensor_count=sensor_count
         self.is_observed = is_observed
         self.sensor_id = sensor_id
         self.travel_time = travel_time
@@ -96,8 +98,8 @@ class D:
 class OD:
     def __init__(self, dod):
         self.od_id = dod.od_id
-        self.from_zone_id = dod.from_zone_id
-        self.to_zone_id = dod.to_zone_id
+        self.o_zone_id = dod.o_zone_id
+        self.d_zone_id = dod.d_zone_id
         self.o_volume=dod.o_volume
         self.d_volume=dod.d_volume
         self.cost=dod.cost
@@ -118,11 +120,11 @@ class OD:
 class Path:
     def __init__(self, dpath):
         self.path_id = dpath.path_id
-        self.from_zone_id = dpath.from_zone_id
-        self.to_zone_id = dpath.to_zone_id
+        self.o_zone_id = dpath.o_zone_id
+        self.d_zone_id = dpath.d_zone_id
         self.node_sequence = dpath.node_sequence
         ## TODO1: use logit model
-        self.rou_ = tf.Variable(dpath.proportion, dtype=tf.float32, name='Path/rou/Path_' + str(self.path_id))
+        self.rou_ = tf.Variable(dpath.path_proportion, dtype=tf.float32, name='Path/rou/Path_' + str(self.path_id))
         self.t = tf.placeholder(tf.float32, shape=None, name='Path/time/Path_' + str(self.path_id))
         self.flow_ = None
         self.exp_ = None
@@ -132,9 +134,10 @@ class Path:
 class Link:
     def __init__(self, dlink):
         self.link_id = dlink.link_id
-        self.from_node_id = dlink.from_node_id
-        self.to_node_id = dlink.to_node_id
+        self.o_node_id = dlink.o_node_id
+        self.d_node_id = dlink.d_node_id
         self.is_observed = dlink.is_observed
+        self.sensor_count=dlink.sensor_count
         self.count = tf.placeholder(tf.float32, shape=None, name='Link/count/link_' + str(self.link_id))
         self.v_ = None
         self.belonged_paths = []
@@ -147,7 +150,7 @@ def load_data():
     t0 = datetime.datetime.now()
     all_node_df = pd.read_csv(inputLocation + 'node.csv', encoding='gbk')
     all_link_df = pd.read_csv(inputLocation + 'road_link.csv', encoding='gbk')
-    all_agent_df = pd.read_csv(inputLocation + 'input_agent.csv', encoding='gbk')
+    all_agent_df = pd.read_csv(inputLocation + 'agent.csv', encoding='gbk')
     agent_type_df = pd.read_csv(inputLocation + 'agent_type.csv', encoding='gbk')
 
     # In[2] Only consider the first sample
@@ -167,26 +170,26 @@ def load_data():
     link_df.reset_index(drop=True, inplace=True)
 
     # prepare for assume data
-    g_dict = od_df[['from_zone_id', 'od_flow']].groupby('from_zone_id').sum()['od_flow']   # calculate the trip generation for different zones
-    od_df['split_ratio'] = od_df.apply(lambda x: x.od_flow / g_dict[x.from_zone_id], axis=1)  #  Add column split_ratio in the OD dataframe
+    g_dict = od_df[['o_zone_id', 'od_flow']].groupby('o_zone_id').sum()['od_flow']   # calculate the trip generation for different zones
+    od_df['split_ratio'] = od_df.apply(lambda x: x.od_flow / g_dict[x.o_zone_id], axis=1)  #  Add column split_ratio in the OD dataframe
     od_df['od_id'] = od_df.apply(lambda x: int(x.od_id), axis=1)
 
-    od_df['pair'] = od_df.apply(lambda x: (x.from_zone_id, x.to_zone_id), axis=1)  # add OD pair
+    od_df['pair'] = od_df.apply(lambda x: (x.o_zone_id, x.d_zone_id), axis=1)  # add OD pair
     demand_dict = od_df[['pair', 'od_flow']].set_index('pair').to_dict()['od_flow']  # add OD flow
-    link_df['pair'] = link_df.apply(lambda x: (x.from_node_id, x.to_node_id), axis=1)
+    link_df['pair'] = link_df.apply(lambda x: (x.o_node_id, x.d_node_id), axis=1)
     link_dict = link_df[['pair', 'link_id']].set_index('pair').to_dict()['link_id']
 
-    ab_dict = od_df[['to_zone_id', 'od_flow']].groupby('to_zone_id').sum()['od_flow']# calculate the trip attraction for different zones
-    od_df['o_volume']=od_df.apply(lambda x: g_dict[x.from_zone_id], axis=1)###trafffic ageneration
-    od_df['d_volume'] = od_df.apply(lambda x: ab_dict[x.to_zone_id], axis=1)###trafffic attraction
+    ab_dict = od_df[['d_zone_id', 'od_flow']].groupby('d_zone_id').sum()['od_flow']# calculate the trip attraction for different zones
+    od_df['o_volume']=od_df.apply(lambda x: g_dict[x.o_zone_id], axis=1)###trafffic ageneration
+    od_df['d_volume'] = od_df.apply(lambda x: ab_dict[x.d_zone_id], axis=1)###trafffic attraction
     od_df['cost'] = od_df.apply(lambda x: x.od_flow , axis=1)###cost for every od pair
     # #save the ozone*od array
     kj=0
     for indexs in od_df.index:
-        from_zone_id=od_df.loc[indexs]['from_zone_id']
-        to_zone_id=od_df.loc[indexs]['to_zone_id']
-        path_i_df = path_df[path_df['from_zone_id'] == from_zone_id]
-        path_ij_df = path_i_df[path_i_df['to_zone_id'] == to_zone_id]
+        o_zone_id=od_df.loc[indexs]['o_zone_id']
+        d_zone_id=od_df.loc[indexs]['d_zone_id']
+        path_i_df = path_df[path_df['o_zone_id'] == o_zone_id]
+        path_ij_df = path_i_df[path_i_df['d_zone_id'] == d_zone_id]
         cost_ij_value = 0
         for m in path_ij_df.index:
             cost = path_ij_df.loc[m]['path_proportion'] * path_ij_df.loc[m]['time_peroid']
@@ -195,10 +198,10 @@ def load_data():
         kj+=1
     d_df =pd.DataFrame(columns=('d_id','destination'))
     k=0
-    for to_zone_id in od_df['to_zone_id'].unique().tolist():
+    for d_zone_id in od_df['d_zone_id'].unique().tolist():
         k = k + 1
         d_id=k
-        d_df = d_df.append(pd.DataFrame({'d_id': [d_id], 'destination': [to_zone_id]}), ignore_index=True)
+        d_df = d_df.append(pd.DataFrame({'d_id': [d_id], 'destination': [d_zone_id]}), ignore_index=True)
 
 
 
@@ -214,7 +217,7 @@ def load_data():
     ####incomplete sensor data supplementation
     for i in range(len(path_df)):
         path_r = path_df.loc[i]  # Loop out each row in path_df
-        od_pair = (path_r.from_zone_id, path_r.to_zone_id)
+        od_pair = (path_r.o_zone_id, path_r.d_zone_id)
         path_flow = path_r.path_proportion * demand_dict[od_pair]
         node_list = path_r.node_sequence.split('; ')  # Take all the elements and separated
         for i in range(1, len(node_list)):
@@ -224,14 +227,14 @@ def load_data():
 
 
     # Node
-    zone_idx = set(ozone_df.from_node_id)
-    source_zones_ids = set(ozone_df.from_zone_id)
+    zone_idx = set(ozone_df.o_node_id)
+    source_zones_ids = set(ozone_df.o_zone_id)
     node_df = all_node_df
     node_df['is_zone'] = node_df.apply(lambda x: True if x.node_id in zone_idx else False, axis=1)
     dnode = node_df.apply(lambda x: DNode(x.node_id,
                                           is_zone=x.is_zone,  #is zone
                                           is_source_zone=True if x.node_id in source_zones_ids else False,  # is ozone
-                                          generation=ozone_df[ozone_df.from_node_id == x.node_id].trip_generation.values[
+                                          generation=ozone_df[ozone_df.o_node_id == x.node_id].trip_generation.values[
                                               0] if x.node_id in zone_idx else 0,
                                           # two restrictions:1)equal 2)x_node_id in zone_idx
                                           population=None,
@@ -242,8 +245,8 @@ def load_data():
                                 ), axis=1)
     # OD
     dod = od_df.apply(lambda x: DOD(x.od_id,
-                                    x.from_zone_id,
-                                    x.to_zone_id,
+                                    x.o_zone_id,
+                                    x.d_zone_id,
                                     x.split_ratio,
                                     x.o_volume,
                                     x.d_volume,
@@ -254,8 +257,8 @@ def load_data():
     # Path
     path_df['path_id'] = range(len(path_df))
     dpath = path_df.apply(lambda x: DPath(x.path_id,
-                                          x.from_zone_id,
-                                          x.to_zone_id,
+                                          x.o_zone_id,
+                                          x.d_zone_id,
                                           x.node_sequence,
                                           x.node_sequence,
                                           x.path_proportion,
@@ -266,9 +269,10 @@ def load_data():
     link_df['path_id'] = range(len(link_df))
     link_df['sensor_id'] = range(len(link_df))
     dlink = link_df.apply(lambda x: DLink(x.link_id,
-                                          x.from_node_id,
-                                          x.to_node_id,
+                                          x.o_node_id,
+                                          x.d_node_id,
                                           x.time_peroid,
+                                          x.sensor_count,
                                           True if not np.isnan(x.sensor_id) else False,
                                           x.sensor_id if not np.isnan(x.sensor_id) else None,
                                           travel_time=None,
@@ -300,13 +304,13 @@ def build_loss(data):
     print('Time Now:', time.strftime('%H:%M:%S', time.localtime(time.time())))
     # node layer to od layer
     ## NOTE: simplify due to [each zone only include one node]
-    source_zones_ids = set([od_w.from_zone_id for od_w in od])
+    source_zones_ids = set([od_w.o_zone_id for od_w in od])
     source_zones = [node_i for node_i in node if node_i.node_id in source_zones_ids]
     source_zones = sorted(source_zones, key=lambda node_i: node_i.node_id)
 
     for od_r in od:
         for d_i in d:
-            if d_i.destination == od_r.to_zone_id:
+            if d_i.destination == od_r.d_zone_id:
                 od_r.belonged_d = d_i
                 d_i.including_od.append(od_r)
     # TODO1: gravity model,
@@ -323,7 +327,7 @@ def build_loss(data):
                                   name='OD/gravity_model/OD_' + str(od_r.od_id))
 
     for od_w in od:
-        node_i = node[int(od_w.from_zone_id-1)]
+        node_i = node[int(od_w.o_zone_id-1)]
         od_w.q_ = tf.multiply(od_w.gamma_norm_, node_i.alpha_, name='OD/q/OD_' + str(od_w.od_id))
 
     t2 = datetime.datetime.now()
@@ -334,7 +338,7 @@ def build_loss(data):
     # od layer to path layer
     for path_r in path:
         for od_w in od:
-            if od_w.from_zone_id == path_r.from_zone_id and od_w.to_zone_id == path_r.to_zone_id:
+            if od_w.o_zone_id == path_r.o_zone_id and od_w.d_zone_id == path_r.d_zone_id:
                 path_r.belonged_od = od_w
                 od_w.including_paths.append(path_r)
 
@@ -360,7 +364,7 @@ def build_loss(data):
     # path layer to link layer
     link_dict = dict()
     for link_l in link:
-        link_dict[(link_l.from_node_id, link_l.to_node_id)] = link_l
+        link_dict[(link_l.o_node_id, link_l.d_node_id)] = link_l
     for path_r in path:
         node_list = path_r.node_sequence.split(';')
         ## TODO: check whether node_list is longer than 2
@@ -494,41 +498,45 @@ def feed_data(data, graph):
 # In[9]: output the results
 def output_results(sess, data, feed, graph):
     est_ = sess.run(graph.get_tensor_by_name('Node/alpha/vector:0'), feed_dict=feed)
+
     df_dict = {'zone_id': [node_i.node_id for node_i in data['dnode']],
+               'node_id': [node_i.node_id for node_i in data['dnode']],
                'estimated_alpha': est_,
                'target_alpha': [node_i.generation for node_i in data['dnode']]}
     df = pd.DataFrame(df_dict)
-    df = df[['zone_id', 'estimated_alpha', 'target_alpha']]
+    df = df[['zone_id', 'node_id','estimated_alpha', 'target_alpha']]
 
-    df.to_csv(inputLocation+'output_zone_alpha.csv', index=None)
+    df.to_csv(outputLocation+'output_zone_alpha.csv', index=None)
 
     est_ = sess.run(graph.get_tensor_by_name('OD/gamma/vector:0'), feed_dict=feed)
-    df_dict = {'from_zone_id': [od_w.from_zone_id for od_w in data['dod']],
-               'to_zone_id': [od_w.to_zone_id for od_w in data['dod']],
+    df_dict = {'od_id': [od_w.od_id for od_w in data['dod']],
+               'o_zone_id': [od_w.o_zone_id for od_w in data['dod']],
+               'd_zone_id': [od_w.d_zone_id for od_w in data['dod']],
                'estimated_gamma': est_,
                'target_gamma': [od_w.split_ratio for od_w in data['dod']]}
     df = pd.DataFrame(df_dict)
-    df = df[['from_zone_id', 'to_zone_id', 'estimated_gamma', 'target_gamma']]
-    df.to_csv(inputLocation+'output_od_gamma.csv', index=None)
+    df = df[['od_id','o_zone_id', 'd_zone_id', 'estimated_gamma', 'target_gamma']]
+    df.to_csv(outputLocation+'output_od_gamma.csv', index=None)
 
     est_ = sess.run(graph.get_tensor_by_name('Path/rou/vector:0'), feed_dict=feed)
-    df_dict = {'from_zone_id': [path_r.from_zone_id for path_r in data['dpath']],
-               'to_zone_id': [path_r.to_zone_id for path_r in data['dpath']],
-               'path_id': [path_r.path_id for path_r in data['dpath']],
+    df_dict = {'path_id': [path_r.path_id for path_r in data['dpath']],
+               'o_zone_id': [path_r.o_zone_id for path_r in data['dpath']],
+               'd_zone_id': [path_r.d_zone_id for path_r in data['dpath']],
                'estimated_proportion': est_,
-               'target_proportion': [path_r.path_id for path_r in data['dpath']]}
+               'target_proportion': [path_r.path_proportion for path_r in data['dpath']]}
     df = pd.DataFrame(df_dict)
-    df = df[['from_zone_id', 'to_zone_id', 'path_id', 'estimated_proportion', 'target_proportion']]
-    df.to_csv(inputLocation+'output_path_proportion.csv', index=None)
+    df = df[['path_id','o_zone_id', 'd_zone_id',  'estimated_proportion', 'target_proportion']]
+    df.to_csv(outputLocation+'output_path_proportion.csv', index=None)
 
     est_ = sess.run(graph.get_tensor_by_name('Link/v/vector:0'), feed_dict=feed)
     df_dict = {'link_id': [link_l.link_id for link_l in data['dlink']],
-               'from_node_id': [link_l.from_node_id for link_l in data['dlink']],
-               'to_node_id': [link_l.to_node_id for link_l in data['dlink']],
-               'estimated_count': est_}
+               'o_node_id': [link_l.o_node_id for link_l in data['dlink']],
+               'd_node_id': [link_l.d_node_id for link_l in data['dlink']],
+               'estimated_count': est_,
+               'target_count':[link_l.sensor_count for link_l in data['dlink']]}
     df = pd.DataFrame(df_dict)
-    df = df[['link_id', 'from_node_id', 'to_node_id', 'estimated_count']]
-    df.to_csv(inputLocation+'output_link_count.csv', index=None)
+    df = df[['link_id', 'o_node_id', 'd_node_id', 'estimated_count','target_count']]
+    df.to_csv(outputLocation+'output_link_count.csv', index=None)
 
 
 # In[10]:training
@@ -537,7 +545,7 @@ maximum_iterations=1001
 curr_iter = tf.Variable(0)  # Current iteration times
 # learning rate exponential decay
 lr_survey = tf.train.exponential_decay(0.5, curr_iter, decay_steps=maximum_iterations, decay_rate=0.99)
-lr_mobile = tf.train.exponential_decay(0.00001, curr_iter, decay_steps=maximum_iterations , decay_rate=0.99)
+lr_mobile = tf.train.exponential_decay(0.00001, curr_iter, decay_steps=1 , decay_rate=0.99)
 lr_count = tf.train.exponential_decay(0.005, curr_iter, decay_steps=maximum_iterations, decay_rate=0.99)
 learning_rate = tf.train.exponential_decay(1e-3, curr_iter, decay_steps=maximum_iterations, decay_rate=0.99)
 
@@ -588,10 +596,6 @@ with tf.Session() as sess:
         list_mobile.append(train_mse2)
         list_sensor.append(train_mse3)
 
-
-        dataframe = pd.DataFrame({'loss': list_total, 'loss1': list_survey, 'loss2': list_mobile, 'loss3': list_sensor})
-        dataframe.to_csv(inputLocation+"output_loss.csv", index=False)
-
         result = sess.run(merged, feed_dict=feed)  #### Run all computational graphs
         writer.add_summary(result, step)
         writer.add_run_metadata(run_metadata, 'step{}'.format(step))
@@ -602,6 +606,10 @@ with tf.Session() as sess:
               'train_mse =', train_mse, ';',
               'time_now', time.strftime('%H:%M:%S', time.localtime(time.time())))
 
+    ##output the estimation results and loss
+    output_results(sess, data, feed, graph)
+    dataframe = pd.DataFrame({'loss_total': list_total, 'loss_survey': list_survey, 'loss_mobile': list_mobile, 'loss_sensor': list_sensor})
+    dataframe.to_csv(outputLocation+"output_loss.csv", index=True)
     import matplotlib
     import matplotlib.pyplot as plt
 
@@ -617,11 +625,11 @@ with tf.Session() as sess:
         # subplot.set_ylabel("loss value")
         plt.title(name_list[i])
         # plt.grid()
-    plt.savefig(picLocation + 'loss.png', dpi=300, format='png')
+    plt.savefig(picLocation + 'loss-BTCG.png', dpi=300, format='png')
     plt.show()
 
 
-    output_results(sess, data, feed, graph)
+
 
 
 

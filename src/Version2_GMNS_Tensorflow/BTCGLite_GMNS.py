@@ -21,7 +21,8 @@ from keras import backend as K
 
 NUM_PARALLEL_EXEC_UNITS = 8
 
-inputLocation = "SiouxFalls network/"  # "Chicago-Sketch/"#"Sioux Falls network1/"
+inputLocation = "SiouxFalls network/"
+outputLocation = "SiouxFalls network/"+"BTCGLite/"
 picLocation = inputLocation + "pictures/"
 
 
@@ -44,7 +45,7 @@ os.environ["KMP_AFFINITY"] = "granularity=fine,verbose,compact,1,0"
 
 
 # In[0] Functions
-# 相The adjacent layers are connected and normalized
+# The adjacent layers are connected and normalized
 def connection(input_layer, trans_mat, inc_mat):
     sess = tf.Session()
     init = tf.global_variables_initializer()
@@ -85,13 +86,14 @@ def build_optimizer(f_survey, lr_survey, f_mobile, lr_mobile, f_count, lr_count,
     return opt_survey, opt_mobile, opt_count, opt_total
 
 
+
 if __name__ == '__main__':
     # In[1] Input all the samples
     print('----Step 1: Input data----', '\n')
     t0 = datetime.datetime.now()
     all_node_df = pd.read_csv(inputLocation + 'node.csv', encoding='gbk')
     all_link_df = pd.read_csv(inputLocation + 'road_link.csv', encoding='gbk')
-    all_agent_df = pd.read_csv(inputLocation + 'input_agent.csv', encoding='gbk')
+    all_agent_df = pd.read_csv(inputLocation + 'agent.csv', encoding='gbk')
     agent_type_df=pd.read_csv(inputLocation + 'agent_type.csv', encoding='gbk')
 
 
@@ -132,19 +134,19 @@ if __name__ == '__main__':
     print('----Step 2: Build up Hash tables----', '\n')
     t0 = datetime.datetime.now()
     print('Dictionary on link layer...')
-    link_df['link_pair'] = link_df.apply(lambda x: (int(x.from_node_id), int(x.to_node_id)), axis=1)  # name each link
+    link_df['link_pair'] = link_df.apply(lambda x: (int(x.o_node_id), int(x.d_node_id)), axis=1)  # map each link records to the internal data
     link_id_pair_dict = link_df[['link_id', 'link_pair']].set_index('link_pair').to_dict()['link_id']
 
     print('Dictionary on ozone layer...')
-    node_zone_dict = ozone_df[['from_node_id', 'ozone_id']].set_index('from_node_id').to_dict()['ozone_id']
+    node_zone_dict = ozone_df[['o_node_id', 'ozone_id']].set_index('o_node_id').to_dict()['ozone_id']
 
     print('Dictionary on od layer...')
-    od_df['od_pair'] = od_df.apply(lambda x: (int(x.from_zone_id), int(x.to_zone_id)), axis=1)
+    od_df['od_pair'] = od_df.apply(lambda x: (int(x.o_zone_id), int(x.d_zone_id)), axis=1)
     od_pair_dict = od_df[['od_pair', 'od_id']].set_index('od_pair').to_dict()['od_id']
-    od_df['ozone_id'] = od_df.apply(lambda x: node_zone_dict[int(x.from_zone_id)], axis=1)
+    od_df['ozone_id'] = od_df.apply(lambda x: node_zone_dict[int(x.o_zone_id)], axis=1)
 
     print('Dictionary from path to od...')
-    path_df['od_id'] = path_df.apply(lambda x: od_pair_dict[int(x.from_zone_id), int(x.to_zone_id)], axis=1)
+    path_df['od_id'] = path_df.apply(lambda x: od_pair_dict[int(x.o_zone_id), int(x.d_zone_id)], axis=1)
     path_od_dict = path_df[['path_id', 'od_id']].set_index('path_id').to_dict()['od_id']
 
     print('Dictonary from od to o...')
@@ -225,15 +227,19 @@ if __name__ == '__main__':
     # In[8] Build up Computational graph
     print('----Step 4: Build up Computational graph----', '\n')
     print('Create layer from ozone to od...')
-    est_alpha = init_variable([1, num_ozone], 60, 'alpha_')  ###60,7635,10000
+    est_alpha = init_variable([1, num_ozone], 60, 'alpha_')
     est_alpha = tf.nn.relu(est_alpha)
     est_gamma = init_variable([num_ozone, num_od], 1, 'gamma_')
     est_gamma = tf.nn.relu(est_gamma)
+    alpha_1=tf.constant(1, shape=[1, num_ozone],dtype=tf.float64)
     est_q = connection(est_alpha, est_gamma, ozone_od_inc_mat)
+    est_gamma1=connection(alpha_1, est_gamma, ozone_od_inc_mat)
     print('Create layer from od to path...')
     est_rou = init_variable([num_od, num_path], 1, 'rou_')
     est_rou = tf.nn.relu(est_rou)
+    q_1=tf.constant(1, shape=[1, num_od],dtype=tf.float64)
     est_f = connection(est_q, est_rou, od_path_inc_mat)  # q*rou
+    est_rou1=connection(q_1, est_rou, od_path_inc_mat)
     print('Create layer from path to link...')
     est_v = tf.nn.relu(tf.matmul(est_f, path_link_inc_mat))
 
@@ -304,27 +310,57 @@ if __name__ == '__main__':
                 print('\n', 'CPU time:', t1 - t0, '\n')
         output_link_flow = sess.run(est_v)
         output_path_flow = sess.run(est_f)
-        output_path_proportion = sess.run(est_rou)
+        output_path_proportion = sess.run(est_rou1)
         output_od_flow = sess.run(est_q)
-        output_od_distribution = sess.run(est_gamma)
+        output_od_distribution = sess.run(est_gamma1)
         output_ozone_generation = sess.run(est_alpha)
 
-    ##save the estimation result of link,od,path,ozone layer
-    print(output_link_flow.shape[0], output_link_flow.shape[1])
-    df_link = pd.DataFrame(output_link_flow.reshape((-1, 1)),
-                           columns=['link_result'])
-    df_link.to_csv(inputLocation + "output_link.csv", index=False, encoding="utf-8")
-    df_path1 = pd.DataFrame(output_path_flow.reshape((-1, 1)),
-                            columns=['path_result'])
-    df_path1.to_csv(inputLocation + "output_path.csv", index=False, encoding="utf-8")
-    df_od1 = pd.DataFrame(output_od_flow.reshape((-1, 1)),
-                          columns=['od_result'])
-    df_od1.to_csv(inputLocation + "output_od.csv", index=False, encoding="utf-8")
-    df_ozone = pd.DataFrame(output_ozone_generation.reshape((-1, 1)), columns=['ozone_result'])
-    df_ozone.to_csv(inputLocation + "output_ozone.csv", index=False, encoding="utf-8")
     tt1 = datetime.datetime.now()
     print('\n', 'CPU time:', tt1 - tt0, '\n')
+    ##output the estimation results and loss
+    ##save the estimation result of ozone,od,path,link layer
+    #ozone
+    df_dict = {'ozone_id': ozone_df['ozone_id'].values.tolist(),
+               'node_id': ozone_df['o_node_id'].values.tolist(),
+               'estimated_alpha': output_ozone_generation.flatten().tolist(),
+               'target_alpha': ozone_df['trip_generation'].values.tolist()}
+    df = pd.DataFrame(df_dict)
+    df = df[['ozone_id','node_id', 'estimated_alpha', 'target_alpha']]
+    df.to_csv(outputLocation + 'output_zone_alpha.csv', index=None)
+    #od
 
+    df_dict = {'od_id': od_df['od_id'].values.tolist(),
+               'o_zone_id': od_df['o_zone_id'].values.tolist(),
+               'd_zone_id': od_df['d_zone_id'].values.tolist(),
+               'estimated_gamma': output_od_distribution.flatten().tolist(),
+               'target_gamma': od_df['OD_split'].values.tolist()}
+    df = pd.DataFrame(df_dict)
+    df = df[['od_id','o_zone_id', 'd_zone_id', 'estimated_gamma', 'target_gamma']]
+    df.to_csv(outputLocation + 'output_od_gamma.csv', index=None)
+    #path
+    df_dict = {'path_id': path_df['path_id'].values.tolist(),
+               'o_zone_id': path_df['o_zone_id'].values.tolist(),
+               'd_zone_id': path_df['d_zone_id'].values.tolist(),
+               'node_sequence': path_df['node_sequence'].values.tolist(),
+               'estimated_proportion': output_path_proportion.flatten().tolist(),
+               'target_proportion':path_df['path_proportion'].values.tolist()}
+    df = pd.DataFrame(df_dict)
+    df = df[['path_id','o_zone_id', 'd_zone_id',  'estimated_proportion', 'target_proportion']]
+    df.to_csv(outputLocation + 'output_path_proportion.csv', index=None)
+    #link
+    df_dict = {'link_id': link_df['link_id'].values.tolist(),
+               'o_node_id': link_df['o_node_id'].values.tolist(),
+               'd_node_id': link_df['d_node_id'].values.tolist(),
+               'estimated_count': output_link_flow.flatten().tolist(),
+               'target_count': link_df['sensor_count'].values.tolist()}
+    df = pd.DataFrame(df_dict)
+    df = df[['link_id', 'o_node_id', 'd_node_id', 'estimated_count', 'target_count']]
+    df.to_csv(outputLocation + 'output_link_count.csv', index=None)
+
+
+    ##loss
+    dataframe = pd.DataFrame({'loss_total': list_total, 'loss_survey': list_survey, 'loss_mobile': list_mobile, 'loss_sensor': list_sensor})
+    dataframe.to_csv(outputLocation+"output_loss.csv", index=True)
 
     import matplotlib
     import matplotlib.pyplot as plt
@@ -341,6 +377,6 @@ if __name__ == '__main__':
         # subplot.set_ylabel("loss value")
         plt.title(name_list[i])
         # plt.grid()
-    plt.savefig(picLocation + 'loss.png', dpi=300, format='png')
+    plt.savefig(picLocation + 'loss-BTCGLite.png', dpi=300, format='png')
     plt.show()
 

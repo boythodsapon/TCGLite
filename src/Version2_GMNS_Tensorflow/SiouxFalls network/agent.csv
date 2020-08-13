@@ -1,4 +1,4 @@
-agent_id,agent_type,from_zone_id,to_zone_id,from_node_id,to_node_id,od_flow,node_sequence,path_flow,time_peroid,observations
+agent_id,agent_type,o_zone_id,d_zone_id,o_node_id,d_node_id,od_flow,node_sequence,path_flow,time_peroid,observations
 1,1,3,-1,3,-1,-1,-1,-1,1,70
 2,1,12,-1,12,-1,-1,-1,-1,1,60
 3,1,4,-1,4,-1,-1,-1,-1,1,90
