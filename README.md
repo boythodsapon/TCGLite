@@ -1,4 +1,4 @@
-This source code, originally contributed by Dr. Xin (Bruce) Wu, aims to demonstarte how to integrate deep learning methods with transportation modeling, using a Computational Graph-based approach with multiple data sources.
+This source code, originally contributed by Dr. Xin (Bruce) Wu (https://github.com/Grieverwzn), aims to demonstarte how to integrate deep learning methods with transportation modeling, using a Computational Graph-based approach with multiple data sources.
 
 #Key highlights and questions to be addressed:
 
