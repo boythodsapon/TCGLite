@@ -17,7 +17,7 @@ This source code, originally contributed by Dr. Xin (Bruce) Wu (https://github.c
 
 #Published journal paper: 
 Hierarchical travel demand estimation using multiple data sources: A forward and backward propagation algorithmic framework on a layered computational graph. TR Part C.
-You can find a version of this paper and user guide at folder https://github.com/xzhou99/BTCG/tree/master/doc. 
+You can find a version of this paper and user guide at folder https://github.com/xzhou99/TCGLite/tree/master/doc. 
 A related presentation can be found from TOMNET-UTC at Arizona State University:
 https://www.tomnet-utc.org/uploads/5/0/5/4/5054275/tomnet_leadership_webinar_series_feb012019.pdf
 
