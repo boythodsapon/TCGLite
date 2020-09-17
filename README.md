@@ -27,7 +27,13 @@ Further Details in https://zephyrtransport.org/projects/2-network-standard-and-t
 The underlying network uses GMNS format.
 
 #How to start
-One can start working on a simple example using the hypothetic Sinoux Fall network, and then visualize the network and estimation result in NeXTA: https://github.com/xzhou99/NeXTA-GMNS
+
+![function](doc/img/cg_function.png)
+1. To understand backpropogation: http://colah.github.io/posts/2015-08-Backprop/
+2. https://github.com/xzhou99/TCGLite/tree/master/src
+One can start working on a simple example using the hypothetic Sinoux Fall network, and then visualize the network and estimation result in NeXTA: https://github.com/xzhou99/NeXTA-GMNS.
+
+
 This source code is originally contributed by Dr. Xin (Bruce) Wu (https://github.com/Grieverwzn). 
 
 
