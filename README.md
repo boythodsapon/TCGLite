@@ -1,4 +1,4 @@
-This source code, originally contributed by Dr. Xin (Bruce) Wu (https://github.com/Grieverwzn), aims to demonstarte how to integrate deep learning methods with transportation modeling, using a Computational Graph-based approach with multiple data sources.
+This open-source code for OD demand matrix estimation (ODME) aims to demonstarte how to integrate deep learning methods with transportation modeling, using a Computational Graph-based approach with multiple data sources.
 
 #Key highlights and questions to be addressed:
 
@@ -28,6 +28,7 @@ The underlying network uses GMNS format.
 
 #How to start
 One can start working on a simple example using the hypothetic Sinoux Fall network, and then visualize the network and estimation result in NeXTA: https://github.com/xzhou99/NeXTA-GMNS
+This source code is originally contributed by Dr. Xin (Bruce) Wu (https://github.com/Grieverwzn). 
 
 
 
